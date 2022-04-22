@@ -5,14 +5,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.PropertySource;
 import org.springframework.core.env.Environment;
+import org.springframework.security.config.annotation.authentication.builders.AuthenticationManagerBuilder;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityConfigurerAdapter;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.InMemoryOAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.endpoint.*;
@@ -22,7 +24,9 @@ import org.springframework.security.oauth2.client.registration.InMemoryClientReg
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.client.web.HttpSessionOAuth2AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
-import vn.tiki.openapi.javaoauth2client.registration.CustomOAuth2Provider;
+import org.springframework.web.context.annotation.RequestScope;
+import vn.tiki.openapi.javaoauth2client.oauth2.*;
+import vn.tiki.openapi.javaoauth2client.service.OAuthTokenService;
 
 @Configuration
 @EnableWebSecurity
@@ -35,28 +39,48 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         this.env = env;
     }
 
+    protected void configure(final AuthenticationManagerBuilder auth) throws Exception {
+        auth.inMemoryAuthentication()
+                .withUser("tikiseller").password(passwordEncoder().encode("bestseller")).roles("USER")
+                ;
+    }
+
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+
     @Override
     protected void configure(HttpSecurity http) throws Exception {
-        http.authorizeRequests()
-                .antMatchers("/oauth_login")
-                .permitAll()
+        http
+                .csrf().disable()
+                .authorizeRequests()
+                .antMatchers("/login*").permitAll()
+//                .anyRequest().authenticated()
+                .and()
+                .formLogin()
+                    .loginPage("/login.html")
+                    .loginProcessingUrl("/perfom_login")
+                    .usernameParameter("username")
+                    .passwordParameter("password")
+                    .defaultSuccessUrl("/index.html", true)
+                    .failureUrl("/index.html?error=true")
                 .and()
                 .oauth2Login()
-                .loginPage("/oauth_login")
-                .authorizationEndpoint()
-                .baseUri("/oauth2/authorize-client")
-                .authorizationRequestRepository(authorizationRequestRepository())
-                .and()
-                .redirectionEndpoint()
-                .baseUri("/callback") //
-                .and()
-                .tokenEndpoint()
-                .accessTokenResponseClient(accessTokenResponseClient())
-                .and()
-                .defaultSuccessUrl("/login_success")
-                .failureUrl("/login_failure");
-
-
+                    .loginPage("/oauth/login") // login page
+                    .authorizedClientService(authorizedClientService())
+                    .clientRegistrationRepository(clientRegistrationRepository())
+                    .redirectionEndpoint()
+                        .baseUri("/callback") // customize callback url
+                    .and()
+                    .authorizationEndpoint()
+                        .baseUri("/oauth2/authorize-client") // customize authorize url
+                    .and()
+                    .tokenEndpoint()
+                        .accessTokenResponseClient(accessTokenResponseClient()) // customize access token client
+                    .and()
+                    .defaultSuccessUrl("/oauth/authorized", true)
+        ;
     }
 
     @Bean
@@ -69,17 +93,16 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         return new DefaultAuthorizationCodeTokenResponseClient();
     }
 
-//    @Bean
-//    public OAuth2AccessTokenResponseClient<OAuth2RefreshTokenGrantRequest> refreshAccessTokenResponseClient() {
-//        return new DefaultRefreshTokenTokenResponseClient();
-//    }
-//
-//    @Bean
-//    public OAuth2AccessTokenResponseClient<OAuth2ClientCredentialsGrantRequest> clientCredentialAccessTokenResponseClient() {
-//        return new DefaultClientCredentialsTokenResponseClient();
-//    }
+    @Bean
+    public OAuth2AccessTokenResponseClient<OAuth2RefreshTokenGrantRequest> refreshAccessTokenResponseClient() {
+        return new DefaultRefreshTokenTokenResponseClient();
+    }
 
-//  additional configuration for non-Spring Boot projects
+    @Bean
+    public OAuth2AccessTokenResponseClient<OAuth2ClientCredentialsGrantRequest> clientCredentialAccessTokenResponseClient() {
+        return new DefaultClientCredentialsTokenResponseClient();
+    }
+
     private static final List<String> clients = Arrays.asList("tiki", "another");
 
     @Bean
@@ -89,7 +112,7 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
 
-        return new InMemoryClientRegistrationRepository(registrations);
+        return new  InMemoryClientRegistrationRepository(registrations);
     }
 
     @Bean
@@ -106,18 +129,27 @@ public class SecurityConfig extends WebSecurityConfigurerAdapter {
         }
 
         String clientSecret = env.getProperty(CLIENT_PROPERTY_KEY + client + ".client-secret");
+//        String scope = env.getProperty(CLIENT_PROPERTY_KEY + client + ".scopes");
         if (client.equals("tiki")) {
-            return CustomOAuth2Provider.TIKI.getBuilder(client)
+            return CustomOAuthProvider.TIKI.getBuilder(client)
                     .clientId(clientId)
                     .clientSecret(clientSecret)
+                    .scope("inventory", "multichannel", "offline")
                     .build();
         }
         if (client.equals("another")) {
-            return CustomOAuth2Provider.ANOTHER.getBuilder(client)
+            return CustomOAuthProvider.ANOTHER.getBuilder(client)
                     .clientId(clientId)
                     .clientSecret(clientSecret)
                     .build();
         }
         return null;
+    }
+
+    @Bean
+    @RequestScope
+    public TikiApi tikiApi(OAuthTokenService oAuthTokenService) {
+        String accessToken = oAuthTokenService.getAccessToken();
+        return new TikiApi(accessToken);
     }
 }

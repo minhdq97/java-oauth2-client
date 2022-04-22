@@ -1,4 +1,4 @@
-package vn.tiki.openapi.javaoauth2client.registration;
+package vn.tiki.openapi.javaoauth2client.oauth2;
 
 
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -6,7 +6,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 
-public enum CustomOAuth2Provider {
+public enum CustomOAuthProvider {
 
     TIKI {
 
@@ -17,10 +17,8 @@ public enum CustomOAuth2Provider {
             builder.scope("order", "product", "inventory", "multichannel", "offline");
             builder.authorizationUri("https://api.tiki.vn/sc/oauth2/auth");
             builder.tokenUri("https://api.tiki.vn/sc/oauth2/token");
-//            builder.jwkSetUri("https://www.googleapis.com/oauth2/v3/certs");
-//            builder.issuerUri("https://accounts.google.com");
-//            builder.userInfoUri("https://www.googleapis.com/oauth2/v3/userinfo");
-//            builder.userNameAttributeName(IdTokenClaimNames.SUB);
+            builder.userInfoUri("https://api.tiki.vn/integration/v2/sellers/me");
+            builder.userNameAttributeName("name");
             builder.clientName("Tiki");
             return builder;
         }
@@ -36,8 +34,6 @@ public enum CustomOAuth2Provider {
             builder.scope("open");
             builder.authorizationUri("https://api.tiki.vn/sc/oauth2/auth");
             builder.tokenUri("https://api.tiki.vn/sc/oauth2/token");
-            builder.userInfoUri("");
-            builder.userNameAttributeName("");
             builder.clientName("Another");
             return builder;
         }
